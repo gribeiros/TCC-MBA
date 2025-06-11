@@ -1,215 +1,250 @@
-# %%
-import os
-import pandas as pd
-import numpy as np
-import seaborn as sns
-import matplotlib.pyplot as plt
-from scipy.stats import chi2_contingency
+"""Analysis of notifications of violence against women from SES-MG.
+
+This script loads the processed dataset, summarises variables and generates
+exploratory visualisations. The final cleaned dataset is saved under
+``data/processed/cleaned_data.csv``.
+"""
+
+from __future__ import annotations
+
+import math
+from pathlib import Path
 from itertools import combinations
+
+import matplotlib.pyplot as plt
+import numpy as np
+import pandas as pd
+import seaborn as sns
+from scipy.stats import chi2_contingency, shapiro
+
 pd.set_option("display.max_rows", None)
 
-# %% Util Functions
+# ---------------------------------------------------------------------------
+# 1. Introdução/Contexto
+# ---------------------------------------------------------------------------
+# Este script analisa notificações de violência contra mulheres reportadas ao
+# Sistema Único de Saúde de Minas Gerais (SES-MG). O conjunto de dados
+# ``notifications_ses.csv`` foi previamente limpo e está disponível em
+# ``data/processed``.
 
-def to_date_format(df: pd.DataFrame)-> pd.DataFrame:
-    df['DT_NOTIFIC'] = pd.to_datetime(
-        df['DT_NOTIFIC'], dayfirst=True)
-    df['DT_NASC'] = pd.to_datetime(
-        df['DT_NASC'], dayfirst=True)
+VARIABLE_INFO = {
+    "notification_date": "Data em que o caso foi notificado",
+    "birth_date": "Data de nascimento da vítima",
+    "age": "Idade da vítima em anos",
+    "race": "Raça/Cor auto declarada",
+    "city_residence": "Município de residência",
+    "occurrence_place": "Local onde ocorreu o fato",
+    "previous_occurrences": "Indica ocorrência prévia de violência",
+    "self_harm": "Registro de autolesão",
+    "physical_violence": "Violência física",
+    "psychological_violence": "Violência psicológica",
+    "sexual_violence": "Violência sexual",
+    "num_perpetrators": "Número de agressores",
+    "perpetrator_sex": "Sexo do(s) agressor(es)",
+    "sexual_orientation": "Orientação sexual da vítima",
+    "gender_identity": "Identidade de gênero da vítima",
+    "age_category": "Faixa etária categorizada",
+}
+
+# ---------------------------------------------------------------------------
+# 2. Carregamento e revisão de dados
+# ---------------------------------------------------------------------------
+
+def load_dataset() -> pd.DataFrame:
+    """Load processed CSV file with proper date parsing."""
+    path = Path(__file__).resolve().parents[1] / "data" / "processed" / "notifications_ses.csv"
+    df = pd.read_csv(path, parse_dates=["notification_date", "birth_date"])
+    df["age"] = pd.to_numeric(df["age"], errors="coerce")
     return df
 
 
-def chi2_function(vars: list[str], df: pd.DataFrame,order_by: str = 'chi2')-> None:
-    results = []
+def variable_summary(df: pd.DataFrame) -> pd.DataFrame:
+    """Return a descriptive summary for each column of ``df``."""
+    records: list[dict[str, object]] = []
+    for col in df.columns:
+        dtype = df[col].dtype
+        desc = VARIABLE_INFO.get(col, "-")
+        missing = df[col].isna().sum()
+        if pd.api.types.is_numeric_dtype(dtype):
+            series = df[col].dropna()
+            stats = series.describe()
+            sample = series.sample(n=min(len(series), 5000), random_state=42)
+            # Shapiro-Wilk (n <= 5000)
+            if len(sample) > 3:
+                shapiro_p = shapiro(sample).pvalue
+            else:
+                shapiro_p = math.nan
+            records.append(
+                {
+                    "variable": col,
+                    "description": desc,
+                    "type": "numeric",
+                    "mean": stats.get("mean"),
+                    "median": series.median(),
+                    "std": stats.get("std"),
+                    "missing": missing,
+                    "shapiro_p": shapiro_p,
+                }
+            )
+        else:
+            counts = df[col].value_counts()
+            proportion = counts.iloc[0] / len(df) if not counts.empty else math.nan
+            records.append(
+                {
+                    "variable": col,
+                    "description": desc,
+                    "type": "category",
+                    "unique": df[col].nunique(),
+                    "top": counts.index[0] if not counts.empty else None,
+                    "top_prop": proportion,
+                    "missing": missing,
+                }
+            )
+    return pd.DataFrame.from_records(records)
 
-    for var1, var2 in combinations(vars, 2):
-        tabela = pd.crosstab(df[var1], df[var2])
-        
-        chi2, p, _, _ = chi2_contingency(tabela)
-        results.append({
-            'var1': var1,
-            'var2': var2,
-            'chi2': chi2,
-            'association': '✅ Yes' if p < 0.05 else '❌ No'
-        })
 
-    # Exibir resultados ordenados por p-valor
-    df_results = pd.DataFrame(results).sort_values(by=order_by)
-    print(df_results)
+# ---------------------------------------------------------------------------
+# 3. Funções auxiliares
+# ---------------------------------------------------------------------------
 
-# %% Load Data
-path = "../data/dados_violencia_mulheres_ses/to_clean"
-
-files = [f for f in os.listdir(path) if f.endswith('.csv')]
-
-dfs = [to_date_format(pd.read_csv(os.path.join(path, file), sep=';'))
-       for file in files]
-
-
-main = pd.concat(dfs, ignore_index=True)
-
-main.info()
-
-# %% Rename colums and create a copy
-column_mapping = {
-    'DT_NOTIFIC': 'notification_date',
-    'DT_NASC': 'birth_date',
-    'NU_IDADE_N': 'age',
-    'CS_SEXO': 'sex',
-    'CS_RACA': 'race',
-    'ID_MN_RESI': 'city_residence',
-    'LOCAL_OCOR': 'occurrence_place',
-    'OUT_VEZES': 'previous_occurrences',
-    'LES_AUTOP': 'self_harm',
-    'VIOL_FISIC': 'physical_violence',
-    'VIOL_PSICO': 'psychological_violence',
-    'VIOL_SEXU': 'sexual_violence',
-    'NUM_ENVOLV': 'num_perpetrators',
-    'AUTOR_SEXO': 'perpetrator_sex',
-    'ORIENT_SEX': 'sexual_orientation',
-    'IDENT_GEN': 'gender_identity'
-}
-
-main = main.rename(columns=column_mapping)
-main['age'] = pd.to_numeric(main['age'], errors='coerce').astype('Int64')
-
-df_cleaned = main.copy()
-
-main.head()
-
-# %%
-print(main['age'].describe())
-
-main['age'] = pd.to_numeric(main['age'], errors='coerce').astype('Int64')
-sns.boxplot(data=main, y='age')
-main['age'].unique()
-# Remover outliers de 'age' utilizando o método do Intervalo Interquartil (IQR)
-Q1 = main['age'].quantile(0.25)
-Q3 = main['age'].quantile(0.75)
-
-IQR = Q3 - Q1
-
-lower_bound = Q1 - 1.5 * IQR
-upper_bound = Q3 + 1.5 * IQR
-
-df_cleaned = df_cleaned[(df_cleaned['age'] >= lower_bound) & (df_cleaned['age'] <= upper_bound)]
-sns.boxplot(data=df_cleaned, y='age')
-# %%
-# Get value counts and create a bar plot
-plt.figure(figsize=(15, 8))
-age_counts = df_cleaned['age'].value_counts().head(20)
-age_counts.plot(kind='bar')
-plt.title('Top 20 Ages by Number of Cases')
-plt.xlabel('Age')
-plt.ylabel('Number of Cases')
-plt.xticks(rotation=45, ha='right')
-plt.tight_layout()
-
-# Categoriza idades
-def categorize_age(age):
+def categorize_age(age: float | int | None) -> str:
+    if pd.isna(age):
+        return "Ignorado"
     if age < 18:
-        return 'Menor de idade'
-    elif age < 60:
-        return 'Maior de idade'
-    else:
-        return 'Idoso'
+        return "Menor de idade"
+    if age < 60:
+        return "Maior de idade"
+    return "Idoso"
 
-df_cleaned['age_category'] = df_cleaned['age'].apply(categorize_age)
 
-main['age_category'] = main['age'].apply(categorize_age)
+def remove_age_outliers(df: pd.DataFrame) -> pd.DataFrame:
+    """Remove outliers da idade utilizando IQR."""
+    q1 = df["age"].quantile(0.25)
+    q3 = df["age"].quantile(0.75)
+    iqr = q3 - q1
+    lower = q1 - 1.5 * iqr
+    upper = q3 + 1.5 * iqr
+    return df[(df["age"] >= lower) & (df["age"] <= upper)]
 
-plt.figure(figsize=(10, 6))
-sns.countplot(
-    data=df_cleaned,
-    x='age_category',
-    order=df_cleaned['age_category'].value_counts().index,
-    color='teal'
-)
-plt.title('Distribuição por Categoria de Idade')
-plt.xlabel('Categoria')
-plt.ylabel('Quantidade')
-plt.xticks(rotation=45)
-plt.tight_layout()
-plt.show()
 
-main['notification_date'].dt.year.value_counts().plot(kind='bar', title='Distribuição por Ano de Notificação')
+def chi2_associations(vars: list[str], df: pd.DataFrame) -> pd.DataFrame:
+    """Calculate chi-square association for all variable pairs."""
+    results = []
+    for var1, var2 in combinations(vars, 2):
+        table = pd.crosstab(df[var1], df[var2])
+        chi2, p, _, _ = chi2_contingency(table)
+        results.append({"var1": var1, "var2": var2, "chi2": chi2, "p_value": p})
+    return pd.DataFrame(results).sort_values("p_value")
 
-main['notification_date'].dt.month.value_counts().plot(kind='bar', title='Distribuição por Ano de Notificação')
-main.drop(columns=['notification_date', 'birth_date', 'age']).describe()
-vars = main.select_dtypes(include=['object']).columns.tolist()
 
-filtered_vars = [v for v in vars if main[v].nunique() > 1]
-chi2_function(filtered_vars, main)
-main['sex'].value_counts().plot(kind='bar', title='Distribuição por Sexo')
-# Por possui somente uma categoria, e não passar no teste de qui-quadrado se faz necessário remover
-df_cleaned.drop(columns=['sex'],inplace=True)
+# ---------------------------------------------------------------------------
+# 4. Visualizações
+# ---------------------------------------------------------------------------
 
-main['race'].value_counts().plot(kind='bar', title='Distribuição por Raça')
+def plot_age_distribution(df: pd.DataFrame) -> None:
+    sns.boxplot(x=df["age"])
+    plt.title("Distribuição de Idades")
+    plt.tight_layout()
+    plt.show()
 
-# Get value counts and create a bar plot
-plt.figure(figsize=(15, 8))
-city_counts = main['city_residence'].value_counts().head(20)
-city_counts.plot(kind='bar')
-plt.title('Top 20 Cities by Number of Cases')
-plt.xlabel('City')
-plt.ylabel('Number of Cases')
-plt.xticks(rotation=45, ha='right')
-plt.tight_layout()
-city_categories = main['city_residence'].dropna().unique()
-print(f"Total of cities: {len(city_categories)}")
-main['gender_identity'].value_counts().plot(kind='bar', title='Distribuição por Identidade de Gênero')
-main['occurrence_place'].value_counts().plot(kind='bar', title='Distribuição por Local de Ocorrência')
-main['previous_occurrences'].value_counts()
-plt.figure(figsize=(10, 6))
-plt.pie(main['previous_occurrences'].value_counts(),
-        labels=main['previous_occurrences'].value_counts().index,
-        autopct='%1.1f%%',
-        startangle=140)
-plt.title('Distribuição de Ocorrências Anteriores')
-plt.show()
+    plt.figure()
+    sns.histplot(df["age"], kde=True)
+    plt.title("Histograma de Idades")
+    plt.tight_layout()
+    plt.show()
 
-plt.figure(figsize=(10, 6))
-plt.pie(main['self_harm'].value_counts(),
-        labels=main['self_harm'].value_counts().index,
-        autopct='%1.1f%%',
-        startangle=140)
-plt.title('Distribuição de Autolesão')
-plt.show()
-plt.figure(figsize=(10, 6))
-plt.pie(main['physical_violence'].value_counts(),
-        labels=main['physical_violence'].value_counts().index,
-        autopct='%1.1f%%',
-        startangle=140)
-plt.title('Distribuição de Violência Física')
-plt.show()
-plt.figure(figsize=(10, 6))
-plt.pie(main['psychological_violence'].value_counts(),
-        labels=main['psychological_violence'].value_counts().index,
-        autopct='%1.1f%%',
-        startangle=140)
-plt.title('Distribuição de Violência Psicológica')
-plt.show()
-plt.figure(figsize=(10, 6))
-plt.pie(main['sexual_violence'].value_counts(),
-        labels=main['sexual_violence'].value_counts().index,
-        autopct='%1.1f%%',
-        startangle=140)
-plt.title('Distribuição de Violência Sexual')
-plt.show()
-plt.figure(figsize=(10, 6))
-plt.pie(main['num_perpetrators'].value_counts(),
-        labels=main['num_perpetrators'].value_counts().index,
-        autopct='%1.1f%%',
-        startangle=140)
-plt.title('Distribuição do Número de Agressões')
-plt.show()
-plt.figure(figsize=(10, 6))
-plt.pie(main['perpetrator_sex'].value_counts(),
-        labels=main['perpetrator_sex'].value_counts().index,
-        autopct='%1.1f%%',
-        startangle=140)
-plt.title('Distribuição do Sexo do Agressor')
-plt.show()
-sns.countplot(data=main, x='sexual_orientation')
-plt.xticks(rotation=45, ha='right')
-plt.show()
-df_cleaned.to_csv('../data/dados_violencia_mulheres_ses/cleaned/cleaned_data.csv', index=False)
+
+def plot_age_category(df: pd.DataFrame) -> None:
+    plt.figure()
+    sns.countplot(
+        data=df,
+        x="age_category",
+        order=df["age_category"].value_counts().index,
+        color="teal",
+    )
+    plt.title("Distribuição por Categoria de Idade")
+    plt.xlabel("Categoria")
+    plt.ylabel("Quantidade")
+    plt.xticks(rotation=45)
+    plt.tight_layout()
+    plt.show()
+
+
+def plot_time_series(df: pd.DataFrame) -> None:
+    by_year = df["notification_date"].dt.year.value_counts().sort_index()
+    by_year.plot(kind="bar")
+    plt.title("Distribuição por Ano de Notificação")
+    plt.xlabel("Ano")
+    plt.ylabel("Número de casos")
+    plt.tight_layout()
+    plt.show()
+
+    plt.figure()
+    by_month = df["notification_date"].dt.month.value_counts().sort_index()
+    by_month.plot(kind="bar")
+    plt.title("Distribuição por Mês de Notificação")
+    plt.xlabel("Mês")
+    plt.ylabel("Número de casos")
+    plt.tight_layout()
+    plt.show()
+
+
+def plot_cities(df: pd.DataFrame) -> None:
+    plt.figure(figsize=(12, 6))
+    df["city_residence"].value_counts().head(20).plot(kind="bar")
+    plt.title("Top 20 Municípios por Número de Casos")
+    plt.xlabel("Município")
+    plt.ylabel("Número de casos")
+    plt.xticks(rotation=45, ha="right")
+    plt.tight_layout()
+    plt.show()
+
+
+def plot_race(df: pd.DataFrame) -> None:
+    plt.figure()
+    df["race"].value_counts().plot(kind="bar")
+    plt.title("Distribuição por Raça/Cor")
+    plt.xlabel("Raça/Cor")
+    plt.ylabel("Número de casos")
+    plt.tight_layout()
+    plt.show()
+
+
+def plot_correlation(df: pd.DataFrame) -> None:
+    plt.figure(figsize=(10, 8))
+    corr = df.select_dtypes(include=[np.number]).corr()
+    sns.heatmap(corr, annot=True, fmt=".2f", cmap="coolwarm")
+    plt.title("Correlação entre Variáveis Numéricas")
+    plt.tight_layout()
+    plt.show()
+
+
+# ---------------------------------------------------------------------------
+# 5. Pipeline principal
+# ---------------------------------------------------------------------------
+
+def main() -> None:
+    df = load_dataset()
+    print("Dataset shape:", df.shape)
+    print(variable_summary(df))
+
+    df_clean = remove_age_outliers(df)
+    df_clean["age_category"] = df_clean["age"].apply(categorize_age)
+
+    plot_age_distribution(df_clean)
+    plot_age_category(df_clean)
+    plot_time_series(df_clean)
+    plot_cities(df_clean)
+    plot_race(df_clean)
+    plot_correlation(df_clean)
+
+    cat_vars = [c for c in df_clean.columns if df_clean[c].dtype == "object"]
+    cat_results = chi2_associations(cat_vars, df_clean)
+    print(cat_results)
+
+    output = Path(__file__).resolve().parents[1] / "data" / "processed" / "cleaned_data.csv"
+    df_clean.to_csv(output, index=False)
+
+
+if __name__ == "__main__":
+    main()
