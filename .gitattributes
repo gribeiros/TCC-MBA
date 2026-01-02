@@ -2,4 +2,3 @@ data/processed/*.csv filter=lfs diff=lfs merge=lfs -text
 notebooks/*.ipynb filter=lfs diff=lfs merge=lfs -text
 data/series/*.csv filter=lfs diff=lfs merge=lfs -text
 data/processed/violencia_mulheres_ses.csv filter=lfs diff=lfs merge=lfs -text
-notebooks/data_exploration.ipynb filter=lfs diff=lfs merge=lfs -text
