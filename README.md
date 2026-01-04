@@ -1,52 +1,57 @@
-# Violence Against Women Analysis
+# Análise de Violência contra Mulheres em MG
 
-This repository contains the material used in my MBA in Data Science and Analytics final thesis. The goal is to explore public datasets from the state of Minas Gerais (Brazil) related to violence against women.
+Repositório do Trabalho de Conclusão (MBA em Data Science & Analytics). O projeto explora dados públicos de Minas Gerais sobre violência contra mulheres, realizando leitura, limpeza, análises exploratórias e séries temporais para identificar padrões e apoiar discussões sobre políticas públicas.
 
-## Project structure
+## Objetivos
+- Consolidar bases anuais do Governo de Minas Gerais em um único conjunto tratado.
+- Explorar o perfil das vítimas e das ocorrências (idade, raça/cor, cidade, local da ocorrência, reincidência).
+- Analisar diferenças entre tipos de violência e relações com variáveis categóricas (ex.: teste do qui-quadrado).
+- Gerar séries temporais por tipo de violência para observar tendências.
 
-- `notebooks/` – Jupyter notebooks with the exploratory analysis.
-- `src/` – Python modules with helper functions used in the notebooks.
-- `data/` – Raw CSV files and intermediate processed datasets.
-- `docs/` – Additional documentation such as the project overview.
+## Estrutura do repositório
+- `notebooks/`
+  - `data_exploration.ipynb`: leitura dos dados brutos, limpeza/tratamento, análises exploratórias, testes estatísticos e séries temporais por tipo de violência.
+  - `read_files.ipynb`: leitura e inspeção inicial dos CSVs brutos (verificação de colunas, formatos e codificação).
+- `data/`
+  - `raw/`: CSVs originais (separador `;`) obtidos de portais públicos de MG. Ex.: `data/raw/dados_violencia_mulheres_ses_2010.csv`.
+  - `processed/`: saídas geradas pelos notebooks, como `data/processed/violencia_mulheres_ses.csv`.
+- `requirements.txt`: dependências necessárias para rodar os notebooks.
 
-## Data sources
+## Fontes de dados
+CSVs anuais disponibilizados por órgãos públicos de Minas Gerais. Os arquivos usam ponto e vírgula como separador e incluem variáveis demográficas, de local/ocorrência e classificação do tipo de violência. Não há dados sensíveis individualizados; todas as análises são feitas em nível agregado.
 
-The CSV files under the `data/raw/` directory were downloaded from open data portals of the Government of Minas Gerais:
-
-- `notifications_ses/` – notifications of violence against women from the state health secretariat (SES-MG).
-- `domestic_violence/` – domestic violence police reports.
-- `feminicide/` – feminicide records.
-
-Each subfolder contains yearly CSV files in Portuguese separated by semicolons. Cleaned datasets generated from the notebooks are saved under `data/processed/`.
-
-## Notebooks
-
-Two Jupyter notebooks are provided in the `notebooks/` directory:
-
-- **`main_violencia_domestica.ipynb`** – cleaning and plots for the domestic violence reports.
-- **`main_violencia_mulheres_ses.ipynb`** – analysis of notifications from the SES dataset including chi-square tests.
-
-They were created with Python 3.12 kernels and rely on common scientific libraries such as pandas and seaborn.
-
-## Reproducing the analysis
-
-1. Install Python 3.11 or newer.
-2. Install the required packages:
+## Ambiente e instalação
+1. Tenha Python 3.11+ instalado.
+2. Crie e ative um ambiente virtual (recomendado):
+   ```bash
+   python -m venv .venv
+   .\\.venv\\Scripts\\activate  # Windows
+   ```
+3. Instale dependências:
    ```bash
    pip install -r requirements.txt
    ```
-3. Launch Jupyter and open the desired notebook:
+
+## Como reproduzir
+1. Coloque os CSVs originais em `data/raw/` (não versionados).
+2. Abra o Jupyter na pasta de notebooks:
    ```bash
    jupyter notebook notebooks/
    ```
-4. Execute the cells in order. The notebooks expect the CSV files to be present in the `data/raw/` and `data/processed/` directories.
+3. Execute `read_files.ipynb` para validar estrutura e encoding dos CSVs.
+4. Execute `data_exploration.ipynb` na ordem das células:
+   - limpeza/normalização (separadores, tipos e valores ausentes);
+   - análise exploratória (distribuições numéricas, contingência para variáveis categóricas);
+   - séries temporais por tipo de violência (física, psicológica, sexual, autolesão).
+5. Os arquivos tratados são gravados em `data/processed/` e podem ser reutilizados em outras etapas ou estudos.
 
-For a short summary of the project, see [docs/project_overview.md](docs/project_overview.md).
+## Principais saídas
+- Conjunto consolidado `data/processed/violencia_mulheres_ses.csv`.
+- Gráficos de distribuição para variáveis numéricas e categóricas.
+- Resultados de testes de independência entre variáveis categóricas.
+- Séries temporais por tipo de violência para visualização de tendências.
 
-## Requirements
-
-See `requirements.txt` for the package versions. The notebooks were tested with pandas 2, numpy 1.26, matplotlib 3.8, seaborn 0.13 and scipy 1.11.
-
-## License
-
-This project is licensed under the Apache 2.0 License. See the [LICENSE](LICENSE) file for details.
+## Observações e limites
+- Dados públicos podem ter lacunas de cobertura ou diferenças de coleta entre anos.
+- Ajuste caminhos ou separadores caso novos CSVs venham em formatos distintos.
+- O projeto foca reprodutibilidade acadêmica; não inclui modelagem preditiva ou dashboards interativos.
